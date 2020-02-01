@@ -1,0 +1,139 @@
+% Program to implement the Boundary Element Method for
+% the Laplaceï¿½s Equation with given boundary conditions
+% Author: Kengaï¿½Cheng Ang
+% Edited by Ibrahim Alatawi
+% ======================================================
+
+clear all; clc; close all
+%----- Pre-processing -----
+% Read boundary coodinates, values and type of boundary condition
+% from input file, Find nodes and lengths of elements, and their unit
+% normal vectors
+[ele, iele, u_exact, q_exact] = elementsF; %ele(:,:,i) @i 1 x-coordinates, 2 y-coordinates,
+%3 element length and normal, 4 boundary condition type, 5 BCV
+
+
+
+%- ---- Processing - ï¿½ - -
+% Find approximations for unknown boundary values by
+% [G]{u} = [F]{q}
+% ï¿½ constructing matrix A and vector b
+% ï¿½ solving the system "Ax = b" for x
+
+[lx,lw]=lgwt(6,-1,1);  % integration point
+t = size(ele); % find the number of elements;
+% A = zeros(t(3)*3,t(3)*3);
+b = zeros(t(3)*3+9,1);
+for e = 1 : t(3)+1 % loop over source elements
+    nf = 3; if e == t(3)+1; nf = 9; end
+    for n = 1 : nf % % loop over source element nodes
+        r = (e-1)*3+n;
+        for f = 1 : t(3)+1  % loop over field element
+            if e == t(3)+1; s =iele(1:2,n); else s = ele(n,1:2,e); end
+            if f == t(3)+1
+                ef = iele;
+                if e == f   % singular integrals
+                    F =  ef(1,3)/(2.0*pi)*(log(ef(1,3)/2.0) - 1.0); % u*
+                    del = zeros(1,9); del(1,n) = 1;
+                    F = F*del;
+                else
+                    [F] = findfg9(lx, lw, s, ef(1:2,:));
+                    del = zeros(1,9);
+                end
+                c = (f-1)*3+1:(f-1)*3+9;
+                if (ef(3,1)==0) % applying boundary conditions if u is known
+                    A(r,c) = -F;
+%                     b(r) = b(r) + (-G + 0.5d0*del) * ef(:,5);
+                else            % applying boundary conditions if q is known
+%                     A(r,c) = G - 0.5 .* del;
+                    b(r) = b(r) + F * ef(3,:)';
+                end
+            else
+                ef = ele(:,:,f);
+                if e == f   % singular integrals
+                    G = [0 0 0];                                 % du*/dn
+                    F =  ef(1,3)/(2.0*pi)*(log(ef(1,3)/2.0) - 1.0); % u*
+                    del = [0 0 0]; del(n) = 1;
+                    F = F*del;
+                else  % normal integrals
+                    [F, G] = findfg(lx, lw, s, ef(:,1:2));
+                    del = [0 0 0];
+                end
+                c = (f-1)*3+1:f*3;
+                if (ef(2,4)==0) % applying boundary conditions if u is known
+                    A(r,c) = -F;
+                    b(r) = b(r) + (-G + 0.5d0*del) * ef(:,5);
+                else            % applying boundary conditions if q is known
+                    A(r,c) = G - 0.5 .* del;
+                    b(r) = b(r) + F * ef(:,5);
+                end
+            end
+            
+        end
+    end
+end
+
+
+z = A\b;
+% solve system "Ax = b" and store in z
+% Assign approximate boundary values accordingly
+c = 1;
+for e = 1 : t(3) % loop over source elements
+    for n = 1 : 3 % % loop over source element node
+        if ele(n,4,e) == 0
+            u(e,n) =  ele(n,5,e);
+            q(e,n) = z(c);
+        else
+            u(e,n) = z(c);
+            q(e,n) = ele(n,5,e);
+        end
+        c = c + 1;
+    end
+end
+
+%- ---- - Post-processing ---- --
+% Find value(s) at required point (s)
+for j = 1:99
+    y(j) = 0.01*j;
+    for i = 1:99
+        x(i) = 0.01*i;
+        s(j,i) = 0d0;
+        for e = 1 : t(3)
+            [F, G] = findfg(lx, lw, [x(i) y(j)], ele(:,1:2,e));
+            %             [F, G] = findfg (x(i), y(j), xb(k), yb(k), nx(k), ny(k), lm(k));
+            s(j,i) = s(j,i) + u(e,:)*G' - q(e,:)*F';
+        end
+    end
+end
+
+figure(1)
+hold on
+% plot(xm,ym,'o')
+% plot(xb,yb,'-+')
+surface (x, y, s,'EdgeColor','none')
+
+c = 1;
+for i = 1 : length(ele)
+    coo(c:c+2,1:2) = ele(:,1:2,i);
+    coo(c:c+2,3) = ele(:,4,i);
+    coo(c:c+2,4) = u(i,:)';
+    coo(c:c+2,5) = u_exact(i,:)';
+    c = c + 3;
+end
+
+% graphics of elements
+% for i = 1:n
+%     xx = [xb(i),xb(i+ 1)];
+%     yy = [yb(i), yb(i + 1)];
+%     line(xx, yy,'Color','k','LineWidth',3)
+% end
+% title ('Surface Plot for solution')
+% xlabel('x')
+% ylabel('y')
+% axis([0 1 0 1])
+% axis equal
+
+
+
+
+
